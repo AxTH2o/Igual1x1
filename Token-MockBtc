@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract XyzBTC is ERC20, Ownable {
     constructor() ERC20("Xyz BTC", "+BTC") {
-        _mint(msg.sender, 10_000_000 * 10 ** decimals()); // 1 millón mBTC para pruebas
+        _mint(msg.sender, 10_000_000 * 10 ** decimals()); // 1 millón +BTC para pruebas
     }
 
     function decimals() public pure override returns (uint8) {
