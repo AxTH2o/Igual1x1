@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+contract BTCMockToken is ERC20 {
+    AggregatorV3Interface internal priceFeed;
+
+    constructor() ERC20("BTC Mock Token", "BTCM") {
+        _mint(msg.sender, 50_000_000 * 10**18); // 50 millones de tokens
+        // Dirección del feed BTC/USD en Sepolia
+        priceFeed = AggregatorV3Interface(0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43);
+    }
+
+    // Obtener el precio de BTC en USD
+    function getBTCPrice() public view returns (int) {
+        (, int price, , , ) = priceFeed.latestRoundData();
+        return price; // Precio en USD con 8 decimales
+    }
+}
