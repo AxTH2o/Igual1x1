@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+interface AggregatorV3Interface {
+    function decimals() external view returns (uint8);
+    function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+}
+
+contract BitBits is ERC20, Ownable {
+    // Direcciones de oráculos Chainlink en Ethereum Mainnet
+    address public constant BTC_USD_ORACLE = 0xF403008652a5bEEa4988F8cA5B36dbC97BeE88c6; // BTC/USD price feed
+    address public constant ETH_USD_ORACLE = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419; // ETH/USD price feed
+    
+    uint8 public constant BTC_DECIMALS = 8; // Decimales del precio BTC/USD
+    uint8 public constant TOKEN_DECIMALS = 18; // Decimales del token ERC20
+    uint256 public constant INITIAL_SUPPLY = 70_000_000 * 10**TOKEN_DECIMALS; // 70 millones de unidades
+    
+    error InvalidAmount(uint256 amount);
+    error OracleError(int256 price);
+
+    constructor() ERC20("BitBits", "BitBtc") Ownable(msg.sender) {
+        _mint(msg.sender, INITIAL_SUPPLY);
+    }
+    
+    /**
+     * @dev Mint tokens respaldados por ETH depositado.
+     * Calcula el valor en USD del ETH recibido usando ETH/USD oracle,
+     * luego divide por el precio de BTC/USD para determinar cuántos BitBtc mintar.
+     * Cada BitBtc = 1 USD / precio_BTC (para equivaler al valor de 1 BTC en USD).
+     * Requiere que el msg.value > 0.
+     */
+    function mintBacked() external payable onlyOwner {
+        if (msg.value == 0) revert InvalidAmount(0);
+        
+        // Obtener precio ETH/USD
+        (, int256 ethPrice, , , ) = AggregatorV3Interface(ETH_USD_ORACLE).latestRoundData();
+        if (ethPrice <= 0) revert OracleError(ethPrice);
+        
+        // Obtener precio BTC/USD
+        (, int256 btcPrice, , , ) = AggregatorV3Interface(BTC_USD_ORACLE).latestRoundData();
+        if (btcPrice <= 0) revert OracleError(btcPrice);
+        
+        // Calcular valor en USD del ETH depositado (ajustado por decimales)
+        uint256 ethUsdValue = (uint256(ethPrice) * msg.value * (10 ** TOKEN_DECIMALS)) / (10 ** BTC_DECIMALS);
+        
+        // Calcular cantidad de BitBtc a mint: valor_USD / precio_BTC (para que 1 BitBtc ~ valor de 1 BTC en USD)
+        // Nota: Esto hace que el suministro total represente el valor total depositado equivalente a BTC.
+        uint256 amountToMint = (ethUsdValue * (10 ** TOKEN_DECIMALS)) / (uint256(btcPrice) * (10 ** (TOKEN_DECIMALS - BTC_DECIMALS)));
+        if (amountToMint == 0) revert InvalidAmount(0);
+        
+        _mint(msg.sender, amountToMint);
+    }
+    
+    /**
+     * @dev Función para consultar el precio actual de BTC/USD directamente (útil para verificar).
+     */
+    function getBtcPrice() public view returns (int256) {
+        (, int256 price, , , ) = AggregatorV3Interface(BTC_USD_ORACLE).latestRoundData();
+        return price;
+    }
+    
+    /**
+     * @dev Mint ilimitado simple (sin respaldo, solo para owner). Usa si no quieres respaldo ETH.
+     * @param to Dirección que recibe los tokens.
+     * @param amount Cantidad a mint (en wei, considerando 18 decimales).
+     */
+    function mint(address to, uint256 amount) external onlyOwner {
+        if (amount == 0) revert InvalidAmount(0);
+        _mint(to, amount);
+    }
+    
+    // Funciones estándar ERC20 heredadas de OpenZeppelin
+    // Puedes agregar burn, pause, etc., si lo necesitas.
+}
