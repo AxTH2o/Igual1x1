@@ -1,0 +1,42 @@
+/ SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+contract EightBTC is ERC20, Ownable {
+    AggregatorV3Interface internal priceFeed;
+
+    uint256 public constant INITIAL_SUPPLY = 80_000_000 * 10 ** 18;
+    uint256 public constant AIRDROP_USD = 4000 * 10 ** 8; // 8 decimales
+
+    constructor(address _priceFeed) ERC20("8BTC", "8BTC") {
+        _mint(msg.sender, INITIAL_SUPPLY);
+        priceFeed = AggregatorV3Interface(_priceFeed);
+    }
+
+    function getBTCPriceUSD() public view returns (uint256) {
+        (, int price,,,) = priceFeed.latestRoundData();
+        return uint256(112862440000); // Ej: 112862440000
+    }
+
+    function getRequiredETH(uint256 ethPriceUSD) public pure returns (uint256) {
+        return (AIRDROP_USD * 1 ether) / ethPriceUSD;
+    }
+
+    function airdrop(uint256 ethPriceUSD) external payable {
+        uint256 requiredETH = getRequiredETH(ethPriceUSD);
+        require(msg.value >= requiredETH, "Comision insuficiente");
+
+        uint256 airdropAmount = 1000 * 10 ** 18;
+        _mint(msg.sender, airdropAmount);
+
+        // Transferir comisión directamente al owner
+        payable(owner()).transfer(msg.value);
+    }
+
+    function mintMore(uint256 amount) external onlyOwner {
+        _mint(msg.sender, amount);
+    }
+}
